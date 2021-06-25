@@ -1,0 +1,146 @@
+// define whether to save the picture
+#define saveImages 1
+ // define whether the recorded video
+#define recordVideo 0
+
+ // Load OpenCV API
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/video/video.hpp>
+
+ // Load PYLON API.
+#include <pylon/PylonIncludes.h>
+
+#include<iostream>
+
+#ifdef PYLON_WIN_BUILD
+#include <pylon/PylonGUI.h>    
+#endif
+
+ //Namespaces. 
+using namespace Pylon;
+using namespace cv;
+using namespace std;
+// define the number of images captured
+static const uint32_t c_countOfImagesToGrab = 10;
+
+void main()
+{
+
+    // Pylon automatic initialization and termination
+    Pylon::PylonAutoInitTerm autoInitTerm;
+    try
+    {
+        // Create a camera object (the first to recognize the camera)
+        CInstantCamera camera(CTlFactory::GetInstance().CreateFirstDevice());
+        // print the name of the camera
+        std::cout << "Using device " << camera.GetDeviceInfo().GetModelName() << endl;
+        // Get node mapping camera to obtain the camera parameters
+        GenApi::INodeMap& nodemap = camera.GetNodeMap();
+        //Turn on the camera 
+        camera.Open();
+        // Get the width and height of the camera imaging
+        GenApi::CIntegerPtr width = nodemap.GetNode("Width");
+        GenApi::CIntegerPtr height = nodemap.GetNode("Height");
+
+        // set the maximum buffer camera, the default is 10
+        camera.MaxNumBuffer = 5;
+        // Create a new pylon ImageFormatConverter object.
+        CImageFormatConverter formatConverter;
+        // determine the output pixel format
+        formatConverter.OutputPixelFormat = PixelType_BGR8packed;
+        // Create a Pylonlmage follow-up will be used to create the OpenCV images
+        CPylonImage pylonImage;
+
+        // declare an integer variable used to count the captured image, and create an index file name
+        int grabbedlmages = 0;
+
+        // Create a new OpenCV video creator object.
+        VideoWriter cvVideoCreator;
+        // Create a new OpenCV image object.
+
+        Mat openCvImage;
+        // video file name
+
+        std::string videoFileName = "openCvVideo.avi";
+        // define the video frame size
+        cv::Size frameSize = Size((int)width->GetValue(), (int)height->GetValue());
+
+        // set the video frame rate and coding type, there are three options
+        // frame rate imaging camera frame rate must be less than or equal
+        cvVideoCreator.open(videoFileName, CV_FOURCC('D', 'I', 'V', 'X'), 10, frameSize, true);
+        //cvVideoCreator.open(videoFileName, CV_F0URCC('M','P',,4','2’), 20, frameSize, true);
+        //cvVideoCreator.open(videoFileName, CV_FOURCC('M', '3', 'P', 'G'), 20, frameSize, true);
+
+
+                 // start crawling c_countOfImagesToGrab images.
+                 // camera default setting continuous crawl mode
+        camera.StartGrabbing(c_countOfImagesToGrab, GrabStrategy_LatestImageOnly);
+
+        // fetch pointer result data
+        CGrabResultPtr ptrGrabResult;
+
+        // When c_countOfImagesToGrab images to obtain a successful recovery, Camera.StopGrabbing () 
+        // called automatically RetrieveResult () method to stop crawling
+
+        while (camera.IsGrabbing())
+
+        {
+            // waiting to receive and restore the image, the timeout is set to 5000 ms.
+            camera.RetrieveResult(5000, ptrGrabResult, TimeoutHandling_ThrowException);
+
+            // If successful image capture
+            if (ptrGrabResult->GrabSucceeded())
+            {
+                // Get the image data
+                cout << "SizeX: " << ptrGrabResult->GetWidth() << endl;
+                cout << "SizeY: " << ptrGrabResult->GetHeight() << endl;
+
+                // the fetched data into the buffer pylon image.
+                formatConverter.Convert(pylonImage, ptrGrabResult);
+
+                // pylon image will turn into OpenCV image.
+                openCvImage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC3, (uint8_t*)pylonImage.GetBuffer());
+
+                // If you need to save the picture
+                if (saveImages)
+                {
+                    std::ostringstream s;
+                    // definition file name is stored according to index pictures
+                    s << "image_" << grabbedlmages << ".jpg";
+                    std::string imageName(s.str());
+                    // Save the OpenCV image.
+                    imwrite(imageName, openCvImage);
+                    grabbedlmages++;
+                }
+
+                // If you need to record video
+                if (recordVideo)
+                {
+
+                    cvVideoCreator.write(openCvImage);
+                }
+
+                // Create a new OpenCV display window.
+                namedWindow("OpenCV Display Window", CV_WINDOW_NORMAL); // other options: CV_AUTOSIZE, CV_FREERATIO
+                                 // display timely images.
+                imshow("OpenCV Display Window", openCvImage);
+
+                // Define a timeout for customer's input in
+                // '0' means indefinite, i.e. the next image will be displayed after closing the window.
+                // '1' means live stream
+                waitKey(1); // here must be 1.0 need to click the close window button next to a picture collection
+
+            }
+
+        }
+
+    }
+    catch (GenICam::GenericException& e)
+    {
+        // Error handling.
+        cerr << "An exception occurred." << endl
+            << e.GetDescription() << endl;
+    }
+    return 0;
+}
