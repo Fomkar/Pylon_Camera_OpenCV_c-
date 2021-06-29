@@ -22,6 +22,7 @@ when explicitly released or when the smart pointer object is destroyed.
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/core/core.hpp"
+// Namespace for using OpenCV.
 using namespace cv;
 //Namespace for using pylon objects.
 using namespace Pylon;
