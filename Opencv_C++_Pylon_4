@@ -1,0 +1,165 @@
+/*
+Not: Başlamadan önce Basler, Programmer's Guide konusunu okumanızı önerir.
+pilon ile yüklenen pilon C++ API belgelerinde.
+Pilonun daha yüksek bir ana sürümüne yükseltme yapıyorsanız, Basler ayrıca
+pilon C++ API belgelerinde Geçiş konusunun okunmasını şiddetle tavsiye eder.
+Bu örnek, CInstantCamera sınıfını kullanarak görüntülerin nasıl alınacağını ve işleneceğini gösterir.
+Görüntüler eşzamansız olarak yakalanır ve işlenir, yani,
+uygulama bir arabelleği işlerken, bir sonraki arabelleğin alınması yapılır
+paralel.
+CInstantCamera sınıfı, görüntü verilerini almak için bir arabellek havuzu kullanır
+kamera cihazından. Bir arabellek doldurulup hazır olduğunda,
+arabellek, işlenmek üzere kamera nesnesinden alınabilir. tampon
+ve ek görüntü verileri bir yakalama sonucunda toplanır. yakalama sonucu
+alındıktan sonra akıllı bir işaretçi tarafından tutulur. Tampon otomatik olarak yeniden kullanılır
+açıkça serbest bırakıldığında veya akıllı işaretçi nesnesi yok edildiğinde.
+*/
+
+#include<pylon/PylonIncludes.h> // Birçok pylon kütüphanesi içinde barındırır.
+
+#ifdef PYLON_WIN_BUILD //"if not defined" anlamındadır. Bir sabitin tanımlanmamış olması halinde ne yapılacağını bildirmeye yarar.
+#include <pylon/PylonGUI.h>
+#endif // PYLON_WIN_BUILD
+#include <opencv2/opencv.hpp> //OPencv'nin genel kütüphaneleri 
+#include <opencv2/highgui/highgui.hpp> // waitKey , İmshow , imwrite işlemlerinin kütüphanesi 
+#include "opencv2/core/core.hpp"
+#include <opencv2/imgproc/imgproc.hpp> // image processing(Görüntü işleme) kütüphanesi
+#include <iostream> // cout için kütüphane
+#include <Windows.h>
+#include "pylon/InstantCamera.h"
+#include <pylon/PixelType.h>
+#include <pylon/Parameter.h>
+#include <ctime>
+
+// Opencv araçları namespace
+using namespace cv;
+
+// Standart(yazma,atama,tanım) kütüphaneler için bir namespace
+using namespace std;
+
+//Pylon objeleri için namespace
+using namespace Pylon;
+
+// GenApı araçaları 
+using namespace GenApi;
+
+
+static const uint32_t c_countOfImagesToGrab = 1000;
+/* orgImg;
+Mat dst;
+
+int trackVal = 1;
+
+void track(int, void*) 
+{
+	
+	if (trackVal % 2 == 1) 
+	{
+		medianBlur(orgImg, dst, trackVal);
+
+		printf("%d \n", trackVal);
+		
+	}
+}*/
+
+
+int main(int argc, char** argv)
+{
+	/*
+	orgImg = imread("D:\\sincap.jpg");
+	namedWindow("Trackbar Penceresi", WINDOW_AUTOSIZE);
+	createTrackbar("Name", "Trackbar Penceresi", &trackVal, 200, track);
+	imshow("Resim", orgImg);
+	*/
+
+	// Uygulamadan çıkış yapmak için olan kod
+	int exitCode = 0;
+
+	//Emin olmak için otomatik olarak PylonInitialize ve PylonTerminate'i çağırıyoruz
+	//Pylon çalışma sistemi bu nesnenin çalışma ömrüne bağlıdır
+	PylonAutoInitTerm autoInitTerm;
+	CGrabResultPtr ptrGrabResult; // burda sonucu alıyoruz
+	int stop_s = 0;
+	int start_s = 0;
+	int grabbedImages = 0;
+	namedWindow("CV_Image", WINDOW_AUTOSIZE);
+	try
+	{
+		// Kamera bilgileri ile kamerayı açalım
+		CDeviceInfo info; // Kamera bilgilerini info değişkeninine atadık
+		info.SetSerialNumber("40038474");
+		CInstantCamera camera(CTlFactory::GetInstance().CreateDevice(info));
+		CBooleanParameter(camera.GetNodeMap(), "EventNotification").TrySetValue(true);
+	
+		cout << "Using Devive :" << camera.GetDeviceInfo().GetModelName() << endl;
+		cout << " Device IP : " << camera.GetDeviceInfo().GetIpAddress() << endl;
+		cout << "Serial Number :" << camera.GetDeviceInfo().GetSerialNumber() << endl;
+		cout << " Camera ID: " << camera.GetDeviceInfo().GetDeviceID() << endl;
+		cout << "Device Class : " << camera.GetDeviceInfo().GetDeviceClass() << endl;
+		cout << " Camera Config Options  : " << camera.GetDeviceInfo().GetIpConfigOptions() << endl;
+		//cout << "Camera of fps : " << camera.GetDeviceInfo().IsIpConfigOptionsAvailable)() << endl;
+		cout << " Buffer Value : " << camera.NumReadyBuffers() << endl;
+
+		start_s = clock();
+		camera.Open();
+		GenApi::CIntegerPtr widht(camera.GetNodeMap().GetNode("Width"));
+		GenApi::CIntegerPtr height(camera.GetNodeMap().GetNode("Height"));
+
+		//camera.UserSetSelector.SetValue(UserSetSelector_HighGa
+		//CParameter camera(CParameter::GetAccessMode().;
+		//camera.Parameters[PLCamera.AcquisitionFrameRateEnable].SetValue(true);
+		//camera.Parameters[PLCamera.AcquisitionFrameRateAbs].SetValue(30.0);
+
+		Mat cv_Image(widht->GetValue(), height->GetValue(), CV_8UC3);
+		camera.StartGrabbing();
+		CPylonImage image;
+		CImageFormatConverter fc;
+		fc.OutputPixelFormat = PixelType_RGB8packed;
+		
+		while (camera.IsGrabbing())
+		{
+			camera.RetrieveResult(5000, ptrGrabResult, TimeoutHandling_ThrowException);
+			if (ptrGrabResult->GrabSucceeded())
+			{
+				fc.Convert(image, ptrGrabResult);
+				cv_Image = Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC3, (uint8_t*)image.GetBuffer());
+				imshow("CV_Image", cv_Image);
+				waitKey(1);
+				while(grabbedImages<100)
+				{
+					
+					std::ostringstream s;
+					// definition file name is stored according to index pictures
+					s << "D:\\Basler Denemeleri\\image_" << grabbedImages << ".jpg";
+					std::string imageName(s.str());
+					// Save the OpenCV image.
+					imwrite(imageName, cv_Image);
+					grabbedImages++;
+					cout << " Buffer Value : " << camera.NumReadyBuffers()<< endl;
+					
+				}
+					if (waitKey(30) == 27) // 27 ascıı tablosuna göre esc tuşuna mutakip gelir
+					{
+						camera.StopGrabbing();
+						camera.Close();
+						stop_s = clock();
+					}
+			}
+			
+
+		}
+		
+	}
+	catch (GenICam::GenericException& e)
+	{
+		//Hatalı Ayarlama yaptınız
+		cerr <<"Bir istisna oluştu hata olabilir..."<<endl << e.GetDescription() << endl;
+		
+		exitCode = 1;
+	}
+	// Çıkışta beklemeyi devre dışı bırakmak için aşağıdaki iki satırı yorumlayın
+	cout << "time: " <<(stop_s - start_s) / double(CLOCKS_PER_SEC) * 1000<< "microseconds" << endl;
+	cerr << endl << "Kapatmak icin Enter tusuna Basiniz" << endl;
+	while (cin.get() != '\n');
+	return exitCode;
+}
